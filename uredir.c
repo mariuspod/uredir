@@ -31,12 +31,47 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#define NUM_PATTERNS 4
 
-static int echo       = 0;
-static int inetd      = 0;
-static int background = 1;
-static int do_syslog  = 1;
-static char *prognm   = PACKAGE_NAME;
+static int echo         = 0;
+static int inetd        = 0;
+static int has_patterns = 0;
+static int background   = 1;
+static int do_syslog    = 1;
+static char *prognm     = PACKAGE_NAME;
+
+int parse_patterns();
+
+struct Pattern {
+	char *prefix;
+	char *hostname;
+	int port;
+};
+
+struct Pattern *newPattern() {
+	struct Pattern *retVal = malloc(sizeof(struct Pattern));
+	if (retVal == NULL)
+		return EXIT_FAILURE;
+	retVal->prefix = malloc(64); // prefixes can be up to 64 chars long which should fit.
+	if (retVal->prefix == NULL) {
+		free (retVal);
+		return EXIT_FAILURE;
+	}
+	retVal->hostname = malloc(64); // hostnames can be up to 64 chars long which should fit.
+	if (retVal->hostname == NULL) {
+		free (retVal);
+		return EXIT_FAILURE;
+	}
+	retVal->port = malloc(sizeof(int));
+	if (retVal->port == NULL) {
+		free (retVal);
+		return EXIT_FAILURE;
+	}
+	return retVal;
+}
+
+struct Pattern *patterns[NUM_PATTERNS];
+
 
 static int loglvl(char *level)
 {
@@ -56,7 +91,7 @@ static int version(void)
 	return 0;
 }
 
-#define USAGE "Usage: %s [-hinsv] [-I NAME] [-l LEVEL] [SRC:PORT] [DST:PORT]"
+#define USAGE "Usage: %s [-hinspv] [-I NAME] [-l LEVEL] [SRC:PORT] [DST:PORT]"
 
 static int usage(int code)
 {
@@ -72,6 +107,7 @@ static int usage(int code)
 	printf("  -l LVL  Set log level: none, err, info, notice (default), debug\n");
 	printf("  -n      Run in foreground, do not detach from controlling terminal\n");
 	printf("  -s      Use syslog, even if running in foreground, default w/o -n\n");
+	printf("  -p      Pattern-based forwarding based on the actual payload. The patterns are defined by setting an ENV variable $PATTERNS in the format: 'my_pattern_1=10.10.0.1,my_pattern_2=10.10.0.2'\n");
 	printf("  -v      Show program version\n\n");
 	printf("If DST:PORT is left out the program operates in echo mode.\n"
 	       "Bug report address: %-40s\n\n", PACKAGE_BUGREPORT);
@@ -175,39 +211,42 @@ int main(int argc, char *argv[])
 	struct sockaddr_in da;
 
 	ident = prognm = progname(argv[0]);
-	while ((c = getopt(argc, argv, "hiI:l:nsv")) != EOF) {
+	while ((c = getopt(argc, argv, "hiI:l:nspv")) != EOF) {
 		switch (c) {
-		case 'h':
-			return usage(0);
+			case 'h':
+				return usage(0);
 
-		case 'i':
-			inetd = 1;
-			break;
+			case 'i':
+				inetd = 1;
+				break;
 
-		case 'I':
-			ident = strdup(optarg);
-			break;
+			case 'I':
+				ident = strdup(optarg);
+				break;
 
-		case 'l':
-			loglevel = loglvl(optarg);
-			if (-1 == loglevel)
-				return usage(1);
-			break;
+			case 'l':
+				loglevel = loglvl(optarg);
+				if (-1 == loglevel)
+					return usage(1);
+				break;
 
-		case 'n':
-			background = 0;
-			do_syslog--;
-			break;
+			case 'n':
+				background = 0;
+				do_syslog--;
+				break;
 
-		case 's':
-			do_syslog++;
-			break;
+			case 's':
+				do_syslog++;
+				break;
+			case 'p':
+				has_patterns = 1;
+				break;
 
-		case 'v':
-			return version();
+			case 'v':
+				return version();
 
-		default:
-			return usage(-1);
+			default:
+				return usage(-1);
 		}
 	}
 

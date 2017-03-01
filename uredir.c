@@ -107,7 +107,7 @@ static int usage(int code)
 	printf("  -l LVL  Set log level: none, err, info, notice (default), debug\n");
 	printf("  -n      Run in foreground, do not detach from controlling terminal\n");
 	printf("  -s      Use syslog, even if running in foreground, default w/o -n\n");
-	printf("  -p      Pattern-based forwarding based on the actual payload. The patterns are defined by setting an ENV variable $PATTERNS in the format: 'my_pattern_1=10.10.0.1,my_pattern_2=10.10.0.2'\n");
+	printf("  -p      Pattern-based forwarding based on the actual payload. The patterns are defined by setting an ENV variable $PATTERNS in the format: 'my_pattern_1=127.0.0.1:1111,my_pattern_2=127.0.0.1:2222'\n");
 	printf("  -v      Show program version\n\n");
 	printf("If DST:PORT is left out the program operates in echo mode.\n"
 	       "Bug report address: %-40s\n\n", PACKAGE_BUGREPORT);

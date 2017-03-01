@@ -138,6 +138,21 @@ static void exit_cb(int signo)
 	exit(0);
 }
 
+static struct Pattern* get_pattern(char *buf) {
+	for (int i = 0; i < NUM_PATTERNS; i++) {
+		struct Pattern *p = patterns[i];
+		if(p && strlen(p->prefix) > 0 && starts_with(buf, p->prefix))
+			return p;
+	}
+	return NULL;
+}
+
+int starts_with(const char *a, const char *b)
+{
+	if(strncmp(a, b, strlen(b)) == 0) return 1;
+	return 0;
+}
+
 /*
  * read from in, forward to out, creating a socket pipe ... or tube
  *

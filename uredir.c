@@ -367,7 +367,7 @@ int parse_patterns()
 		syslog(LOG_ERR, "No forwarding patterns provided, please pass it as ENV variable $PATTERNS.\n");
 		return -1;
 	}
-	syslog(LOG_INFO, "Forwarding patterns:\n");
+	syslog(LOG_NOTICE, "Forwarding patterns:\n");
 
 	/* populate the patterns */
 	int i = 0;
@@ -414,7 +414,7 @@ int parse_patterns()
 	}
 	for (int i = 0; i < NUM_PATTERNS; i++) {
 		if(patterns[i] && strlen(patterns[i]->prefix) > 0)
-			syslog(LOG_INFO, "'%s' -> %s:%d\n", patterns[i]->prefix, patterns[i]->hostname, patterns[i]->port);
+			syslog(LOG_NOTICE, "'%s' -> %s:%d\n", patterns[i]->prefix, patterns[i]->hostname, patterns[i]->port);
 	}
 	return 0;
 }

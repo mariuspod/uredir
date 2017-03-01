@@ -176,6 +176,14 @@ static int tuby(int sd, struct sockaddr_in *src, struct sockaddr_in *dst)
 	}
 
 	syslog(LOG_DEBUG, "Received %d bytes data from %s:%d", n, inet_ntop(AF_INET, &sa.sin_addr, addr, sn), ntohs(sa.sin_port));
+	if (has_patterns) {
+		struct Pattern *p = get_pattern(buf);
+		if (p == NULL)
+			return -1;
+		syslog(LOG_DEBUG, "Found forwarding pattern for prefix: '%s': %s:%d\n", p->prefix, p->hostname, p->port);
+		dst->sin_addr.s_addr = inet_addr(p->hostname);
+		dst->sin_port = htons(p->port);
+	}
 
 	/* Echo mode, return everything to sender */
 	if (!dst)
@@ -279,7 +287,17 @@ int main(int argc, char *argv[])
 	signal(SIGQUIT, exit_cb);
 	signal(SIGTERM, exit_cb);
 
-	if (inetd) {
+	if (has_patterns) {
+		if (parse_patterns() < 0)
+			return usage(-3);
+
+
+		/* By default we need at least src:port */
+		src_port = parse_ipport(argv[optind++], src, sizeof(src));
+		if (-1 == src_port)
+			return usage(-3);
+
+	} else if (inetd) {
 		/* In inetd mode we redirect from src=stdin to dst:port */
 		dst_port = parse_ipport(argv[optind], dst, sizeof(dst));
 	} else {

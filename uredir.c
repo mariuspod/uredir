@@ -350,13 +350,80 @@ int main(int argc, char *argv[])
 		if (inetd)
 			alarm(3);
 
-		if (echo)
+		if (echo) {
 			tuby(sd, NULL, NULL);
-		else if (tuby(sd, &sa, &da))
+		} else if (tuby(sd, &sa, &da))
 			tuby(sd, NULL, &sa);
 	}
 
 	return 0;
+}
+
+int parse_patterns()
+{
+	/* check that we have patterns */
+	char *patterns_env = getenv("PATTERNS");
+	if (patterns_env == NULL) {
+		syslog(LOG_ERR, "No forwarding patterns provided, please pass it as ENV variable $PATTERNS.\n");
+		return -1;
+	}
+	syslog(LOG_INFO, "Forwarding patterns:\n");
+
+	/* populate the patterns */
+	int i = 0;
+	struct Pattern *p;
+	char *prefix;
+	char *hostname;
+	int port;
+	char *pattern_str;
+	char *end_str;
+	pattern_str = strtok_r(patterns_env, ",", &end_str);
+	while (pattern_str != NULL) {
+		p = newPattern();
+		char *end_token;
+		hostname = "";
+		port = 0;
+		prefix = strtok_r(pattern_str, "=", &end_token);
+		if (prefix != NULL) {
+			char *dst = strtok_r(NULL, "=", &end_token);
+			if (dst == NULL) {
+				freePattern(p);
+			} else {
+				char *port_token;
+				hostname = strtok_r(dst, ":", &port_token);
+				if (hostname == NULL) {
+					freePattern(p);
+				} else {
+					char *port_str = strtok_r(NULL, ":", &port_token);
+					if (port_str == NULL) {
+						freePattern(p);
+					} else {
+						if (i >= NUM_PATTERNS)
+							return -1;
+
+						p->prefix = strdup(prefix);
+						p->hostname = strdup(hostname);
+						p->port = atoi(port_str);
+						patterns[i] = p;
+					}
+				}
+			}
+		}
+		pattern_str = strtok_r(NULL, ",", &end_str);
+		i++;
+	}
+	for (int i = 0; i < NUM_PATTERNS; i++) {
+		if(patterns[i] && strlen(patterns[i]->prefix) > 0)
+			syslog(LOG_INFO, "'%s' -> %s:%d\n", patterns[i]->prefix, patterns[i]->hostname, patterns[i]->port);
+	}
+	return 0;
+}
+
+void freePattern(struct Pattern *p) {
+	free(p->port);
+	free(p->hostname);
+	free(p->prefix);
+	free(p);
 }
 
 /**

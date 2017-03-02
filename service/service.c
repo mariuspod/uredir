@@ -1,6 +1,7 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -19,9 +20,7 @@ int main(int argc, char *argv[])
 {
 
   unsigned short port = PORT;
-  if (argc > 1) {
-    port = (unsigned short) atoi(argv[1]);
-  }
+  port = (unsigned short) atoi(getenv("MYPORT"));
   struct sockaddr_in si_me, si_other;
   int s, i, slen=sizeof(si_other);
   char buf[BUFLEN];

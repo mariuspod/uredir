@@ -35,6 +35,7 @@
 #include <errno.h>
 #include <limits.h>
 #define NUM_PATTERNS 4
+#define PREFIX_ALL "all"
 
 static char *prognm     = PACKAGE_NAME;
 
@@ -68,7 +69,7 @@ static int version(void)
   return 0;
 }
 
-#define USAGE "Usage: %s [-hv] [-l LEVEL] [SRC:PORT] [PATTERNS]"
+#define USAGE "Usage: PATTERNS=my_pattern_1=127.0.0.1:1111,my_pattern_2=127.0.0.1:2222%s [-hv] [-l LEVEL] [PORT]"
 
 static int usage(int code)
 {
@@ -79,23 +80,6 @@ static int usage(int code)
   printf("  -v      Show program version\n\n");
 
   return code;
-}
-
-static int parse_ipport(char *arg, char *buf, size_t len)
-{
-  char *ptr;
-
-  if (!arg || !buf || !len)
-    return -1;
-
-  ptr = strchr(arg, ':');
-  if (!ptr)
-    return -1;
-
-  *ptr++ = 0;
-  snprintf(buf, len, "%s", arg);
-
-  return atoi(ptr);
 }
 
 static void exit_cb(int signo)
@@ -185,7 +169,7 @@ int main(int argc, char *argv[])
 
 
   /* By default we need at least src:port */
-  src_port = parse_ipport(argv[optind++], src, sizeof(src));
+  src_port = (unsigned short) atoi(argv[optind++]);
   if (-1 == src_port)
     return usage(-3);
 
@@ -200,14 +184,27 @@ int main(int argc, char *argv[])
   sa.sin_addr.s_addr = htonl(INADDR_ANY);
   sa.sin_port = htons(src_port);
   if (bind(sd, (struct sockaddr *)&sa, sizeof(sa)) == -1) {
-    syslog(LOG_ERR, "Failed binding our address (%s:%d): %m", src, src_port);
+    syslog(LOG_ERR, "Failed binding our address (%s:%d): %m", "0.0.0.0", src_port);
     return 1;
   }
+  syslog(LOG_DEBUG, "Successfully bound to address (%s:%d)", "0.0.0.0", src_port);
 
   while (1) {
     int forwarded = forward(sd);
     if (forwarded != 0)
       return forwarded;
+  }
+  return 0;
+}
+
+int reply(int sd, char *buf, int n, struct Pattern *p) {
+  syslog(LOG_DEBUG, "Found forwarding pattern for prefix: '%s': %s:%d\n", p->prefix, p->hostname, p->port);
+  syslog(LOG_DEBUG, "Forwarding %d bytes data to %s:%d", n, p->hostname, p->port);
+  n = sendto(sd, buf, n, 0, (struct sockaddr *)&p->destination, sizeof(p->destination));
+  if (n <= 0) {
+    if (n < 0)
+      syslog(LOG_ERR, "Failed forwarding data: %m");
+    return 1;
   }
   return 0;
 }
@@ -226,18 +223,24 @@ int forward(int sd) {
     return 1;
   }
 
-  struct Pattern *p = get_pattern(buf);
-  if (p == NULL)
+  if (starts_with(buf, PREFIX_ALL)) {
+    for(int i = 0; i < NUM_PATTERNS; i++) {
+      if(patterns[i]) {
+        int reply_ret = reply(sd, buf, n, patterns[i]);
+        if(reply_ret != 0)
+          return reply_ret;;
+      }
+
+    }
     return 0;
-  syslog(LOG_DEBUG, "Found forwarding pattern for prefix: '%s': %s:%d\n", p->prefix, p->hostname, p->port);
-  syslog(LOG_DEBUG, "Forwarding %d bytes data to %s:%d", n, p->hostname, p->port);
-  n = sendto(sd, buf, n, 0, (struct sockaddr *)&p->destination, sizeof(p->destination));
-  if (n <= 0) {
-    if (n < 0)
-      syslog(LOG_ERR, "Failed forwarding data: %m");
-    return 1;
+  } else {
+    struct Pattern *p = get_pattern(buf);
+    if (p == NULL) {
+      return 0;
+    } else {
+      return reply(sd, buf, n, p);
+    }
   }
-  return 0;
 }
 
 int get_destination(const char *hostname, unsigned short port, struct sockaddr_in *dst) {

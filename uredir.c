@@ -328,7 +328,7 @@ int main(int argc, char *argv[])
 		}
 
 		sa.sin_family = AF_INET;
-		sa.sin_addr.s_addr = inet_addr(src);
+		sa.sin_addr.s_addr = htonl(INADDR_ANY);//inet_addr(src);
 		sa.sin_port = htons(src_port);
 		if (bind(sd, (struct sockaddr *)&sa, sizeof(sa)) == -1) {
 			syslog(LOG_ERR, "Failed binding our address (%s:%d): %m", src, src_port);

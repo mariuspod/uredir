@@ -33,13 +33,9 @@
 #include <netinet/in.h>
 #include <netdb.h>
 #include <errno.h>
+#include <limits.h>
 #define NUM_PATTERNS 4
 
-static int echo         = 0;
-static int inetd        = 0;
-static int has_patterns = 0;
-static int background   = 1;
-static int do_syslog    = 1;
 static char *prognm     = PACKAGE_NAME;
 
 int parse_patterns();
@@ -72,26 +68,15 @@ static int version(void)
   return 0;
 }
 
-#define USAGE "Usage: %s [-hinspv] [-I NAME] [-l LEVEL] [SRC:PORT] [DST:PORT]"
+#define USAGE "Usage: %s [-hv] [-l LEVEL] [SRC:PORT] [PATTERNS]"
 
 static int usage(int code)
 {
-  if (inetd) {
-    syslog(LOG_ERR, USAGE, prognm);
-    return code;
-  }
 
   printf("\n" USAGE "\n\n", prognm);
   printf("  -h      Show this help text\n");
-  printf("  -i      Run in inetd mode, get SRC:PORT from stdin\n");
-  printf("  -I NAME Identity, tag syslog messages with NAME, default: process name\n");
   printf("  -l LVL  Set log level: none, err, info, notice (default), debug\n");
-  printf("  -n      Run in foreground, do not detach from controlling terminal\n");
-  printf("  -s      Use syslog, even if running in foreground, default w/o -n\n");
-  printf("  -p      Pattern-based forwarding based on the actual payload. The patterns are defined by setting an ENV variable $PATTERNS in the format: 'my_pattern_1=127.0.0.1:1111,my_pattern_2=127.0.0.1:2222'\n");
   printf("  -v      Show program version\n\n");
-  printf("If DST:PORT is left out the program operates in echo mode.\n"
-      "Bug report address: %-40s\n\n", PACKAGE_BUGREPORT);
 
   return code;
 }
@@ -134,62 +119,6 @@ static struct Pattern* get_pattern(char *buf) {
   return NULL;
 }
 
-
-/*
- * read from in, forward to out, creating a socket pipe ... or tube
- *
- * If no @dst is given then we're in echo mode, send everything back
- * If no @src is given then we should forward the reply
- */
-static int tuby(int sd, struct sockaddr_in *src, struct sockaddr_in *dst)
-{
-  int n;
-  char buf[BUFSIZ], addr[50];
-  struct sockaddr_in sa;
-  static struct sockaddr_in da;
-  socklen_t sn = sizeof(sa);
-
-  syslog(LOG_DEBUG, "Reading %s socket ...", src ? "client" : "proxy");
-  n = recvfrom(sd, buf, sizeof(buf), 0, (struct sockaddr *)&sa, &sn);
-  if (n <= 0) {
-    if (n < 0)
-      syslog(LOG_ERR, "Failed receiving data: %m");
-    return 0;
-  }
-
-  syslog(LOG_DEBUG, "Received %d bytes data from %s:%d", n, inet_ntop(AF_INET, &sa.sin_addr, addr, sn), ntohs(sa.sin_port));
-  if (has_patterns) {
-    struct Pattern *p = get_pattern(buf);
-    if (p == NULL)
-      return -1;
-    syslog(LOG_DEBUG, "Found forwarding pattern for prefix: '%s': %s:%d\n", p->prefix, p->hostname, p->port);
-    *dst = p->destination;
-  }
-
-  /* Echo mode, return everything to sender */
-  if (!dst)
-    return sendto(sd, buf, n, 0, (struct sockaddr *)&sa, sn);
-
-  /* Verify the received packet is the actual reply before we forward it */
-  if (!src) {
-    if (sa.sin_addr.s_addr != da.sin_addr.s_addr || sa.sin_port != da.sin_port)
-      return 0;
-  } else {
-    *src = sa;	/* Tell callee who called */
-    da   = *dst;	/* Remember for forward of reply. */
-  }
-
-  syslog(LOG_DEBUG, "Forwarding %d bytes data to %s:%d", n, inet_ntop(AF_INET, &dst->sin_addr, addr, sizeof(*dst)), ntohs(dst->sin_port));
-  n = sendto(sd, buf, n, 0, (struct sockaddr *)dst, sizeof(*dst));
-  if (n <= 0) {
-    if (n < 0)
-      syslog(LOG_ERR, "Failed forwarding data: %m");
-    return 0;
-  }
-
-  return n;
-}
-
 static char *progname(char *arg0)
 {
   char *nm;
@@ -203,6 +132,8 @@ static char *progname(char *arg0)
   return nm;
 }
 
+int forward(int sd);
+
 int main(int argc, char *argv[])
 {
   int c, sd, src_port, dst_port;
@@ -215,35 +146,15 @@ int main(int argc, char *argv[])
   struct sockaddr_in da;
 
   ident = prognm = progname(argv[0]);
-  while ((c = getopt(argc, argv, "hiI:l:nspv")) != EOF) {
+  while ((c = getopt(argc, argv, "h:l:v")) != EOF) {
     switch (c) {
       case 'h':
         return usage(0);
-
-      case 'i':
-        inetd = 1;
-        break;
-
-      case 'I':
-        ident = strdup(optarg);
-        break;
 
       case 'l':
         loglevel = loglvl(optarg);
         if (-1 == loglevel)
           return usage(1);
-        break;
-
-      case 'n':
-        background = 0;
-        do_syslog--;
-        break;
-
-      case 's':
-        do_syslog++;
-        break;
-      case 'p':
-        has_patterns = 1;
         break;
 
       case 'v':
@@ -269,75 +180,63 @@ int main(int argc, char *argv[])
   signal(SIGQUIT, exit_cb);
   signal(SIGTERM, exit_cb);
 
-  if (has_patterns) {
-    if (parse_patterns() < 0)
-      return usage(-3);
+  if (parse_patterns() < 0)
+    return usage(-3);
 
 
-    /* By default we need at least src:port */
-    src_port = parse_ipport(argv[optind++], src, sizeof(src));
-    if (-1 == src_port)
-      return usage(-3);
-
-  } else if (inetd) {
-    /* In inetd mode we redirect from src=stdin to dst:port */
-    dst_port = parse_ipport(argv[optind], dst, sizeof(dst));
-  } else {
-    /* By default we need at least src:port */
-    src_port = parse_ipport(argv[optind++], src, sizeof(src));
-    if (-1 == src_port)
-      return usage(-3);
-
-    dst_port = parse_ipport(argv[optind], dst, sizeof(dst));
-  }
-
-  /* If no dst, then user wants to echo everything back to src */
-  if (-1 == dst_port) {
-    echo = 1;
-  } else {
-    da.sin_family = AF_INET;
-    da.sin_addr.s_addr = inet_addr(dst);
-    da.sin_port = htons(dst_port);
-  }
-
-  if (inetd) {
-    sd = STDIN_FILENO;
-  } else {
-    sd = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
-    if (sd < 0) {
-      syslog(LOG_ERR, "Failed opening UDP socket: %m");
-      return 1;
-    }
-
-    sa.sin_family = AF_INET;
-    sa.sin_addr.s_addr = htonl(INADDR_ANY);//inet_addr(src);
-    sa.sin_port = htons(src_port);
-    if (bind(sd, (struct sockaddr *)&sa, sizeof(sa)) == -1) {
-      syslog(LOG_ERR, "Failed binding our address (%s:%d): %m", src, src_port);
-      return 1;
-    }
-
-    if (background) {
-      if (-1 == daemon(0, 0)) {
-        syslog(LOG_ERR, "Failed daemonizing: %m");
-        return 2;
-      }
-    }
-  }
+  /* By default we need at least src:port */
+  src_port = parse_ipport(argv[optind++], src, sizeof(src));
+  if (-1 == src_port)
+    return usage(-3);
 
   /* At least on Linux the obnoxious IP_MULTICAST_ALL flag is set by default */
+  sd = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
+  if (sd < 0) {
+    syslog(LOG_ERR, "Failed opening UDP socket: %m");
+    return 1;
+  }
   setsockopt(sd, IPPROTO_IP, IP_MULTICAST_ALL, &opt, sizeof(opt));
-
-  while (1) {
-    if (inetd)
-      alarm(3);
-
-    if (echo) {
-      tuby(sd, NULL, NULL);
-    } else if (tuby(sd, &sa, &da))
-      tuby(sd, NULL, &sa);
+  sa.sin_family = AF_INET;
+  sa.sin_addr.s_addr = htonl(INADDR_ANY);
+  sa.sin_port = htons(src_port);
+  if (bind(sd, (struct sockaddr *)&sa, sizeof(sa)) == -1) {
+    syslog(LOG_ERR, "Failed binding our address (%s:%d): %m", src, src_port);
+    return 1;
   }
 
+  while (1) {
+    int forwarded = forward(sd);
+    if (forwarded != 0)
+      return forwarded;
+  }
+  return 0;
+}
+
+int forward(int sd) {
+  int n;
+  char buf[USHRT_MAX], addr[50];
+  struct sockaddr_in sa;
+  socklen_t sn = sizeof(sa);
+
+  syslog(LOG_DEBUG, "Reading socket ...");
+  n = recvfrom(sd, buf, sizeof(buf), 0, (struct sockaddr *)&sa, &sn);
+  if (n <= 0) {
+    if (n < 0)
+      syslog(LOG_ERR, "Failed receiving data: %m");
+    return 1;
+  }
+
+  struct Pattern *p = get_pattern(buf);
+  if (p == NULL)
+    return 0;
+  syslog(LOG_DEBUG, "Found forwarding pattern for prefix: '%s': %s:%d\n", p->prefix, p->hostname, p->port);
+  syslog(LOG_DEBUG, "Forwarding %d bytes data to %s:%d", n, p->hostname, p->port);
+  n = sendto(sd, buf, n, 0, (struct sockaddr *)&p->destination, sizeof(p->destination));
+  if (n <= 0) {
+    if (n < 0)
+      syslog(LOG_ERR, "Failed forwarding data: %m");
+    return 1;
+  }
   return 0;
 }
 

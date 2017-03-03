@@ -33,7 +33,7 @@ The above command will forward all UDP traffic to all services with a valid patt
     
       -h      Show this help text
       -l LVL  Set log level: none, err, info, notice (default), debug
-      -r      Remove the pattern prefix from the payload before sending it to the destination(s)
+      -r      Remove the found pattern prefix from the payload before forwarding
       -v      Show program version
 
 

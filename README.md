@@ -1,82 +1,46 @@
 UDP port redirector
 ===================
-[![Travis Status][]][Travis]
 
 `uredir` is a small [zlib][] licensed tool to redirect UDP connections.
-It can be used to forward connections on select external interfaces to
-loopback.
+It can be used to forward connections on select external interfaces to multiple destinations.
 
-- In normal mode it forwards packets to a given destination and
-  remembers the sender's address.  Packets received from the given
-  destination are forwarded to the sender.
-- In echo mode `uredir` mirrors packets back to the sender.
-- In inetd mode `uredir` lingers for three (3) seconds after forwarding
-  a reply.  This to prevent inetd from spawning new instances for
-  multiple connections, e.g. an SNMP walk.
-- In pattern mode `uredir` forwards packets to a given destination based
-  on a prefix that is matched against the received payload. That way, 
-  it's possible to dispatch UDP packets to various recipients based on the 
-  specified patterns. The patterns can be passed in via ENV variable:
-  `PATTERNS=my_pattern_1=127.0.0.1:1111,my_pattern_2=127.0.0.1:2222`
+`uredir` forwards packets to a given destination based on a prefix that is matched against the received payload.
+That way, it's possible to dispatch UDP packets to various recipients based on the specified patterns.
 
-Tested and used on Linux but should work on any POSIX system.
+## Deployment
+The binary is packaged into a docker container that listens on port `3333` by default.
+### Starting the container
+`docker run -it -p 3333:3333/udp -e PATTERNS="foo.=127.0.0.1:1111,bar.=127.0.0.1:2222" mpod/uredir`
 
-For a TCP port redirector, see [redir](https://github.com/troglobit/redir/).
+## Single destination
+By sending a payload with the matching pattern it will forward the payload to the destination.
+
+`echo foo.hello | nc -w 1 -u localhost 3333`
+
+The above command will forward all UDP traffic to the local service on port `1111`.
+
+## All destinations
+Sending a payload with the fixed prefix `all.` will forward the payload to *all* destinations which are configured via patterns.
+
+`echo all.hello | nc -w 1 -u localhost 3333`
+
+The above command will forward all UDP traffic to all services with a valid pattern, local services with ports `1111` and `2222`.
 
 Usage
 -----
 
-    uredir [-hinspv] [-l LEVEL] [SRC:PORT] [DST:PORT]
+    uredir [-hrv] [-l LEVEL] [PORT]
     
       -h      Show this help text
-      -i      Run in inetd mode, get SRC:PORT from stdin
       -l LVL  Set log level: none, err, info, notice (default), debug
-      -n      Run in foreground, do not detach from controlling terminal
-      -s      Use syslog, even if running in foreground, default w/o -n
-      -p      Pattern-based forwarding based on the actual payload. The patterns are defined by setting an ENV variable $PATTERNS in the format: 'my_pattern_1=127.0.0.1:1111,my_pattern_2=127.0.0.1:2222
+      -r      Remove the pattern prefix from the payload before sending it to the destination(s)
       -v      Show program version
-    
-    If DST:PORT is left out the program operates in echo mode.
-
-
-Example
--------
-
-Command line examples:
-
-    uredir 0.0.0.0:53 192.168.0.1:53
-    uredir 0.0.0.0:7                   # Echo mode
-
-To run `uredir` from a process monitor like [Finit][] or systemd, tell it
-to not background itself and to only use the syslog for log messages:
-
-    uredir -n -s :53 127.0.0.1:53
-
-Inetd example:
-
-    snmp  dgram  udp  wait  root  /usr/sbin/tcpd /usr/local/bin/uredir -i 127.0.0.1:16161
-
-Patterns example:
-
-    `PATTERNS=my_pattern_1=127.0.0.1:1111,my_pattern_2=127.0.0.1:2222 ./uredir -n -p 127.0.0.1:3333`
 
 
 Origin & References
 -------------------
 
-`uredir` is based on [udp_redirect.c][] by Ivan Tikhonov.  All bugs were
-added by [Joachim Nilsson][], so please report them to [GitHub][].
-
-`uredir` was heavily inspired by redir(1), originally by Sam Creasey but
-now also maintained by me.
-
-[zlib]:            https://en.wikipedia.org/wiki/Zlib_License
-[Finit]:           https://github.com/troglobit/finit
-[GitHub]:          https://github.com/troglobit/uredir
-[udp_redirect.c]:  http://brokestream.com/udp_redirect.html
-[Joachim Nilsson]: http://troglobit.com
-[Travis]:          https://travis-ci.org/troglobit/uredir
-[Travis Status]:   https://travis-ci.org/troglobit/uredir.png?branch=master
+`uredir` is based on [udp_redirect.c][] by Ivan Tikhonov and Joachim Nilsson.
 
 <!--
   -- Local Variables:

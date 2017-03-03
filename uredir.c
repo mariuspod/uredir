@@ -35,7 +35,7 @@
 #include <errno.h>
 #include <limits.h>
 #define NUM_PATTERNS 4
-#define PREFIX_ALL "all"
+#define PREFIX_ALL "all."
 
 static char *prognm     = PACKAGE_NAME;
 int remove_prefix = 0;

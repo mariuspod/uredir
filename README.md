@@ -12,22 +12,22 @@ The binary is packaged into a docker container that listens on port `3333` by de
 ### Starting the container
 `docker run -it -p 3333:3333/udp -e PATTERNS="foo.=127.0.0.1:1111,bar.=127.0.0.1:2222" mpod/uredir`
 
-## Single destination
+## Forwarding modes
+### Single destination
 By sending a payload with the matching pattern it will forward the payload to the destination.
 
 `echo foo.hello | nc -w 1 -u localhost 3333`
 
 The above command will forward all UDP traffic to the local service on port `1111`.
 
-## All destinations
+### All destinations
 Sending a payload with the fixed prefix `all.` will forward the payload to *all* destinations which are configured via patterns.
 
 `echo all.hello | nc -w 1 -u localhost 3333`
 
-The above command will forward all UDP traffic to all services with a valid pattern, local services with ports `1111` and `2222`.
+The above command will forward all UDP traffic to all services with a valid pattern, so in our example to local services with ports `1111` and `2222`.
 
-Usage
------
+## Usage
 
     uredir [-hrv] [-l LEVEL] [PORT]
     
@@ -37,8 +37,7 @@ Usage
       -v      Show program version
 
 
-Origin & References
--------------------
+## Origin & References
 
 `uredir` is based on [udp_redirect.c][] by Ivan Tikhonov and Joachim Nilsson.
 

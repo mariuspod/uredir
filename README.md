@@ -42,6 +42,9 @@ Origin & References
 
 `uredir` is based on [udp_redirect.c][] by Ivan Tikhonov and Joachim Nilsson.
 
+[zlib]:            https://en.wikipedia.org/wiki/Zlib_License
+[udp_redirect.c]:  http://brokestream.com/udp_redirect.html
+
 <!--
   -- Local Variables:
   -- mode: markdown

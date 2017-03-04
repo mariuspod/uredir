@@ -2,13 +2,9 @@ UDP port redirector
 ===================
 
 `uredir` is a small [zlib][] licensed tool to redirect UDP connections.
-It can be used to forward connections on select external interfaces to multiple destinations.
-
-`uredir` forwards packets to a given destination based on a prefix that is matched against the received payload.
-That way, it's possible to dispatch UDP packets to various recipients based on the specified patterns.
+This is a fork of the official [uredir][] repository with minified functionality and some new functionality like pattern-based forwarding. It can be also used to forward connections on select external interfaces to multiple destinations based on a prefix that is matched against the received payload.
 
 ## Usage
-
     uredir [-hrv] [-l LEVEL] [PORT]
     
       -h      Show this help text
@@ -50,6 +46,7 @@ There's also the [mpod/uredir][] docker container that has the binary already pa
 [zlib]:            https://en.wikipedia.org/wiki/Zlib_License
 [udp_redirect.c]:  http://brokestream.com/udp_redirect.html
 [mpod/uredir]:     https://hub.docker.com/r/mpod/uredir/
+[uredir]:          https://github.com/troglobit/uredir
 
 <!--
   -- Local Variables:

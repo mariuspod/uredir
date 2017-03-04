@@ -49,7 +49,7 @@ There's also the [mpod/uredir][] docker container that has the binary already pa
 
 [zlib]:            https://en.wikipedia.org/wiki/Zlib_License
 [udp_redirect.c]:  http://brokestream.com/udp_redirect.html
-[mpod/uredir]   :  https://hub.docker.com/r/mpod/uredir/
+[mpod/uredir]:     https://hub.docker.com/r/mpod/uredir/
 
 <!--
   -- Local Variables:

@@ -31,6 +31,7 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netdb.h>
 #include <errno.h>
 #include <limits.h>
 #define NUM_PATTERNS 4
@@ -265,7 +266,11 @@ int get_destination(const char *hostname, unsigned short port, struct sockaddr_i
 	dst->sin_port = htons(port);
 	dst->sin_addr.s_addr = inet_addr(hostname);
 	if (dst->sin_addr.s_addr == INADDR_NONE) {
-            return -1;
+		struct hostent *h = gethostbyname(hostname);
+		if (!h)
+			return -1;
+
+		dst->sin_addr = *((struct in_addr *) h->h_addr);
 	}
 	return 0;
 }

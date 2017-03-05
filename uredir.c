@@ -27,7 +27,6 @@
 #include <string.h>
 #include <stdlib.h>
 #define SYSLOG_NAMES
-#include <syslog.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -52,33 +51,19 @@ struct Pattern {
 
 struct Pattern *patterns[NUM_PATTERNS];
 
-
-static int loglvl(char *level)
-{
-	int i;
-
-	for (i = 0; prioritynames[i].c_name; i++) {
-		if (!strcmp(prioritynames[i].c_name, level))
-			return prioritynames[i].c_val;
-	}
-
-	return atoi(level);
-}
-
 static int version(void)
 {
 	printf("%s\n", PACKAGE_VERSION);
 	return 0;
 }
 
-#define USAGE "Usage: PATTERNS=my_pattern_1=127.0.0.1:1111,my_pattern_2=127.0.0.1:2222%s [-rhv] [-l LEVEL] [PORT]"
+#define USAGE "Usage: PATTERNS=my_pattern_1=127.0.0.1:1111,my_pattern_2=127.0.0.1:2222 %s [-rhv] [PORT]"
 
 static int usage(int code)
 {
 
 	printf("\n" USAGE "\n\n", prognm);
 	printf("  -h      Show this help text\n");
-	printf("  -l LVL  Set log level: none, err, info, notice (default), debug\n");
 	printf("  -r      Remove the found pattern prefix from the payload before forwarding\n");
 	printf("  -v      Show program version\n\n");
 
@@ -87,7 +72,7 @@ static int usage(int code)
 
 static void exit_cb(int signo)
 {
-	syslog(LOG_DEBUG, "Got signal %d, exiting.", signo);
+	printf("Got signal %d, exiting.", signo);
 	exit(0);
 }
 
@@ -125,24 +110,16 @@ int main(int argc, char *argv[])
 {
 	int c, sd, src_port, dst_port;
 	int opt = 0;
-	int log_opts = LOG_CONS | LOG_PID;
-	int loglevel = LOG_NOTICE;
 	char *ident;
 	char src[20], dst[20];
 	struct sockaddr_in sa;
 	struct sockaddr_in da;
 
 	ident = prognm = progname(argv[0]);
-	while ((c = getopt(argc, argv, "h:l:rv")) != EOF) {
+	while ((c = getopt(argc, argv, "hrv")) != EOF) {
 		switch (c) {
 			case 'h':
 				return usage(0);
-
-			case 'l':
-				loglevel = loglvl(optarg);
-				if (-1 == loglevel)
-					return usage(1);
-				break;
 
 			case 'r':
 				remove_prefix = 1;
@@ -156,12 +133,6 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	/*if (!background && do_syslog < 1)
-	  log_opts |= LOG_PERROR;
-	 */
-	openlog(ident, log_opts, LOG_DAEMON);
-	setlogmask(LOG_UPTO(loglevel));
-
 	if (optind >= argc)
 		return usage(-2);
 
@@ -171,7 +142,7 @@ int main(int argc, char *argv[])
 	signal(SIGQUIT, exit_cb);
 	signal(SIGTERM, exit_cb);
 
-	syslog(LOG_DEBUG, "Removing pattern prefix: %s", remove_prefix == 1 ? "yes" : "no");
+	printf("Removing pattern prefix: %s", remove_prefix == 1 ? "yes" : "no");
 
 	if (parse_patterns() < 0)
 		return usage(-3);
@@ -185,7 +156,7 @@ int main(int argc, char *argv[])
 	/* At least on Linux the obnoxious IP_MULTICAST_ALL flag is set by default */
 	sd = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
 	if (sd < 0) {
-		syslog(LOG_ERR, "Failed opening UDP socket: %m");
+		printf("Failed opening UDP socket: %m");
 		return 1;
 	}
 	setsockopt(sd, IPPROTO_IP, IP_MULTICAST_ALL, &opt, sizeof(opt));
@@ -193,10 +164,10 @@ int main(int argc, char *argv[])
 	sa.sin_addr.s_addr = htonl(INADDR_ANY);
 	sa.sin_port = htons(src_port);
 	if (bind(sd, (struct sockaddr *)&sa, sizeof(sa)) == -1) {
-		syslog(LOG_ERR, "Failed binding our address (%s:%d): %m", "0.0.0.0", src_port);
+		printf("Failed binding our address (%s:%d): %m", "0.0.0.0", src_port);
 		return 1;
 	}
-	syslog(LOG_DEBUG, "Successfully bound to address (%s:%d)", "0.0.0.0", src_port);
+	printf("Successfully bound to address (%s:%d)", "0.0.0.0", src_port);
 
 	while (1) {
 		int forwarded = forward(sd);
@@ -213,16 +184,16 @@ void remove_substring(char *s,const char *toremove)
 }
 
 int reply(int sd, char *buf, int n, struct Pattern *p) {
-	syslog(LOG_DEBUG, "Found forwarding pattern for prefix: '%s': %s:%d", p->prefix, p->hostname, p->port);
-	syslog(LOG_DEBUG, "Forwarding %d bytes data to %s:%d", n, p->hostname, p->port);
+	printf("Found forwarding pattern for prefix: '%s': %s:%d", p->prefix, p->hostname, p->port);
+	printf("Forwarding %d bytes data to %s:%d", n, p->hostname, p->port);
 	if (remove_prefix) {
 		remove_substring(buf, p->prefix); 
 	}
-	syslog(LOG_DEBUG, "Data: %s", buf);
+	printf("Data: %s", buf);
 	n = sendto(sd, buf, n, 0, (struct sockaddr *)&p->destination, sizeof(p->destination));
 	if (n <= 0) {
 		if (n < 0)
-			syslog(LOG_ERR, "Failed forwarding data: %m");
+			printf("Failed forwarding data: %m");
 		return 1;
 	}
 	return 0;
@@ -234,11 +205,11 @@ int forward(int sd) {
 	struct sockaddr_in sa;
 	socklen_t sn = sizeof(sa);
 
-	syslog(LOG_DEBUG, "Reading socket ...");
+	printf("Reading socket ...");
 	n = recvfrom(sd, buf, sizeof(buf), 0, (struct sockaddr *)&sa, &sn);
 	if (n <= 0) {
 		if (n < 0)
-			syslog(LOG_ERR, "Failed receiving data: %m");
+			printf("Failed receiving data: %m");
 		return 1;
 	}
 
@@ -282,10 +253,10 @@ int parse_patterns()
 	/* check that we have patterns */
 	char *patterns_env = getenv("PATTERNS");
 	if (patterns_env == NULL) {
-		syslog(LOG_ERR, "No forwarding patterns provided, please pass it as ENV variable $PATTERNS.\n");
+		printf("No forwarding patterns provided, please pass it as ENV variable $PATTERNS.\n");
 		return -1;
 	}
-	syslog(LOG_NOTICE, "Forwarding patterns:");
+	printf("Forwarding patterns:");
 
 	/* populate the patterns */
 	int i = 0;
@@ -332,7 +303,7 @@ int parse_patterns()
 	}
 	for (int i = 0; i < NUM_PATTERNS; i++) {
 		if(patterns[i] && strlen(patterns[i]->prefix) > 0)
-			syslog(LOG_NOTICE, "'%s' -> %s:%d", patterns[i]->prefix, patterns[i]->hostname, patterns[i]->port);
+			printf("'%s' -> %s:%d", patterns[i]->prefix, patterns[i]->hostname, patterns[i]->port);
 	}
 	return 0;
 }

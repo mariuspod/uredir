@@ -98,7 +98,8 @@ int starts_with(const char *a, const char *b)
 }
 
 static struct Pattern* get_pattern(char *buf) {
-	for (int i = 0; i < NUM_PATTERNS; i++) {
+	int i;
+	for (i = 0; i < NUM_PATTERNS; i++) {
 		struct Pattern *p = patterns[i];
 		if(p && strlen(p->prefix) > 0 && starts_with(buf, p->prefix))
 			return p;
@@ -243,7 +244,8 @@ int forward(int sd) {
 	}
 
 	if (starts_with(buf, PREFIX_ALL)) {
-		for(int i = 0; i < NUM_PATTERNS; i++) {
+		int i;
+		for(i = 0; i < NUM_PATTERNS; i++) {
 			if(patterns[i]) {
 				int reply_ret = reply(sd, buf, n, patterns[i]);
 				if(reply_ret != 0)
@@ -330,9 +332,10 @@ int parse_patterns()
 		pattern_str = strtok_r(NULL, ",", &end_str);
 		i++;
 	}
-	for (int i = 0; i < NUM_PATTERNS; i++) {
-		if(patterns[i] && strlen(patterns[i]->prefix) > 0)
-			syslog(LOG_NOTICE, "'%s' -> %s:%d", patterns[i]->prefix, patterns[i]->hostname, patterns[i]->port);
+	int j;
+	for (j = 0; j < NUM_PATTERNS; j++) {
+		if(patterns[j] && strlen(patterns[j]->prefix) > 0)
+			syslog(LOG_NOTICE, "'%s' -> %s:%d", patterns[j]->prefix, patterns[j]->hostname, patterns[j]->port);
 	}
 	return 0;
 }
